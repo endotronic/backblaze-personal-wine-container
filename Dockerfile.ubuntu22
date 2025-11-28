@@ -1,5 +1,12 @@
 FROM jlesage/baseimage-gui:ubuntu-22.04-v4@sha256:51c11dd8405ec18c65b85808ede782e548d8233705c7fb3a62d0dcf0abca55c3
 
+ENV LC_ALL C.UTF-8
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US.UTF-8
+
+ENV USER_ID=1000
+ENV GROUP_ID=1000
+
 ENV WINEPREFIX /config/wine/
 ENV LANG en_US.UTF-8
 ENV APP_NAME="Backblaze Personal Backup"
@@ -8,8 +15,12 @@ ENV DISABLE_AUTOUPDATE="true"
 ENV DISABLE_VIRTUAL_DESKTOP="false"
 ENV DISPLAY_WIDTH="900"
 ENV DISPLAY_HEIGHT="700"
+
+ENV WINEPREFIX /home/backblaze/wine/
+
 # Disable WINE Debug messages
 ENV WINEDEBUG -all
+
 # Set DISPLAY to allow GUI programs to be run
 ENV DISPLAY=:0
 
@@ -25,6 +36,13 @@ RUN apt-get update && \
     sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
     dpkg-reconfigure --frontend=noninteractive locales && \
     update-locale LANG=en_US.UTF-8
+
+RUN apt-get install -y encfs python3-xdg && mkdir /enc
+
+# Generate and install favicons.
+RUN \
+    APP_ICON_URL=https://cdn.icon-icons.com/icons2/2699/PNG/512/backblaze_logo_icon_167820.png && \
+    install_app_icon.sh "$APP_ICON_URL"
 
 EXPOSE 5900
 

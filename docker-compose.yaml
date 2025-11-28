@@ -1,0 +1,23 @@
+services:
+  backblaze-dev:
+    image: backblaze-dev
+    container_name: backblaze-dev
+    hostname: backblaze-dev
+    build: .
+    environment:
+      COMPUTER_NAME: test_bz
+      ENCFS_PASSPHRASE: "foo"
+      TZ: "America/Los_Angeles"
+    cap_add:
+      - SYS_ADMIN
+    privileged: true
+    volumes:
+      - ./test/store:/store
+      - ./test/encfs6.xml:/data/.encfs6.xml
+      - ./test/data1:/data/drive_d:ro
+      - ./test/data2:/data/drive_e:ro
+    devices:
+      - /dev/fuse
+    ports:
+      - 3000:3000
+    restart: unless-stopped

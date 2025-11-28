@@ -1,11 +1,18 @@
 #!/bin/bash
+if [ ! -n "$WINEPREFIX" ]; then 
+    echo "Creating missing WINEPREFIX"
+    mkdir -p "$WINEPREFIX"
+fi
+
+HOME=/home/backblaze
+echo "DEBUG: Using wine prefix $WINEPREFIX as $(id)"
+echo "DEBUG: workdir is $(pwd) home is $HOME"
 set -x
 
 # Define globals
 local_version_file="${WINEPREFIX}dosdevices/c:/ProgramData/Backblaze/bzdata/bzreports/bzserv_version.txt"
 install_exe_path="${WINEPREFIX}dosdevices/c:/"
 log_file="${STARTUP_LOGFILE:-${WINEPREFIX}dosdevices/c:/backblaze-wine-startapp.log}"
-custom_user_agent="backblaze-personal-wine (JonathanTreffler, +https://github.com/JonathanTreffler/backblaze-personal-wine-container), CFNetwork"
 
 # Extracting variables from the PINNED_VERSION file
 pinned_bz_version_file="/PINNED_BZ_VERSION"
@@ -21,21 +28,28 @@ log_message() {
 }
 
 # Pre-initialize Wine
+if [ ! -d "${WINEPREFIX}drive_c" ] && [ -f "${WINEPREFIX}.update-timestamp" ]; then
+    rm "${WINEPREFIX}.update-timestamp"
+    rm "${WINEPREFIX}*.reg" 
+fi
 if [ ! -f "${WINEPREFIX}system.reg" ]; then
     echo "WINE: Wine not initialized, initializing"
+    mkdir -p "${WINEPREFIX}drive_c"
     wineboot -i
     WINETRICKS_ACCEPT_EULA=1 winetricks -q -f dotnet48
     log_message "WINE: Initialization done"
 fi
 
-#Configure Extra Mounts
-for x in {d..z}
-do
-    if test -d "/drive_${x}" && ! test -d "${WINEPREFIX}dosdevices/${x}:"; then
-        log_message "DRIVE: drive_${x} found but not mounted, mounting..."
-        ln -s "/drive_${x}/" "${WINEPREFIX}dosdevices/${x}:"
-    fi
-done
+if [ -n "$COMPUTER_NAME" ]; then
+	if [ ${#COMPUTER_NAME} -gt 15 ]; then 
+		echo "Error: computer name cannot be longer than 15 characters"
+		exit 1
+	fi
+	echo "Setting the wine computer name"
+	wine reg add "HKCU\\SOFTWARE\\Wine\\Network\\" /v UseDnsComputerName /f /d N
+	wine reg add "HKLM\\SYSTEM\\CurrentControlSet\\Control\\ComputerName\\ComputerName" /v ComputerName /f /d $COMPUTER_NAME
+	wine reg add "HKLM\\SYSTEM\\CurrentControlSet\\Control\\ComputerName\\ActiveComputerName" /v ComputerName /f /d $COMPUTER_NAME
+fi
 
 # Set Virtual Desktop
 cd $WINEPREFIX
@@ -45,7 +59,7 @@ if [ "$DISABLE_VIRTUAL_DESKTOP" = "true" ]; then
 else
     # Check if width and height are defined
     if [ -n "$DISPLAY_WIDTH" ] && [ -n "$DISPLAY_HEIGHT" ]; then
-    log_message "WINE: Enabling Virtual Desktop mode with $DISPLAY_WIDTH:$DISPLAY_WIDTH aspect ratio"
+    log_message "WINE: Enabling Virtual Desktop mode with $DISPLAY_WIDTH:$DISPLAY_HEIGHT aspect ratio"
     winetricks vd="$DISPLAY_WIDTH"x"$DISPLAY_HEIGHT"
     else
         # Default aspect ratio
@@ -67,6 +81,12 @@ else
     fi
 fi
 
+sleep 1
+until [ -f "/mounted" ]; do
+	echo "Waiting for mounts..."
+	sleep 1
+done
+
 # Function to handle errors
 handle_error() {
     echo "Error: $1" >> "$log_file"
@@ -80,7 +100,7 @@ fetch_and_install() {
         curl -L "https://www.backblaze.com/win32/install_backblaze.exe" --output "install_backblaze.exe"
     else
         log_message "INSTALLER: FORCE_LATEST_UPDATE=false - downloading pinned version $pinned_bz_version from archive.org"
-        curl -A "$custom_user_agent" -L "$pinned_bz_version_url" --output "install_backblaze.exe" || handle_error "INSTALLER: error downloading from $pinned_bz_version_url"
+        curl -L "$pinned_bz_version_url" --output "install_backblaze.exe" || handle_error "INSTALLER: error downloading from $pinned_bz_version_url"
     fi
     log_message "INSTALLER: Starting install_backblaze.exe"
     WINEARCH="$WINEARCH" WINEPREFIX="$WINEPREFIX" wine64 "install_backblaze.exe" || handle_error "INSTALLER: Failed to install Backblaze"
@@ -88,7 +108,12 @@ fetch_and_install() {
 }
 
 start_app() {
-    log_message "STARTAPP: Starting Backblaze version $(cat "$local_version_file")"
+	if [ ! -f "$local_version_file" ]; then
+		log_message "WARNING: Backblaze doesn't seem to be installed. Attempting to start anyway..."
+	else
+    	log_message "STARTAPP: Starting Backblaze version $(cat "$local_version_file")"
+	fi
+
     wine64 "${WINEPREFIX}drive_c/Program Files (x86)/Backblaze/bzbui.exe" -noquiet &
     sleep infinity
 }

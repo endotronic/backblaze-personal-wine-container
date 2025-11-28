@@ -1,0 +1,17 @@
+#!/bin/bash
+
+if [ ! -n "$ENCFS_PASSPHRASE" ]; then 
+    echo "Error: Missing ENCFS_PASSPHRASE"
+    exit 1
+fi
+
+# Unlink drives as they will be used to signal bind mounts
+for x in {d..y}
+do
+    if test -d "/data/drive_${x}" && [ -L "${WINEPREFIX}dosdevices/${x}:" ]; then
+        unlink "${WINEPREFIX}dosdevices/${x}:"
+    fi
+done
+
+echo "Mounting encFS as user $USER_ID..."
+echo $ENCFS_PASSPHRASE | encfs -f --stdinpass --reverse --no-default-flags -o allow_other -o uid=$USER_ID -o gid=$GROUP_ID /data /enc

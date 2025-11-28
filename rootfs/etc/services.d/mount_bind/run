@@ -1,0 +1,71 @@
+#!/bin/bash
+
+if [ ! -n "$WINEPREFIX" ]; then 
+    echo "Error: Missing WINEPREFIX"
+    exit 1
+fi
+
+if [ -f "/mounted" ]; then
+    rm /mounted
+fi
+
+for x in {d..y}
+do
+    if test -d "/data/drive_${x}" ; then
+        until [ -d "/enc/drive_${x}" ]; do
+            echo "mount-bind: Waiting for encFS on /enc/drive_${x}"
+            sleep 1
+        done
+    fi
+
+    until [ ! -d "${WINEPREFIX}dosdevices/${x}:" ]; do
+        echo "Waiting for drive ${x} to be unlinked..."
+        sleep 1
+    done
+done
+
+for x in {d..y}
+do
+    if test -d "/data/drive_${x}" ; then
+        until [ -d "/enc/drive_${x}/.bzvol" ]; do
+            echo "mount-bind: Waiting for .bzol at /enc/drive_${x}/.bzvol"
+            sleep 1
+        done
+    fi
+done
+
+until [ -d "${WINEPREFIX}" ]; do
+    echo "Waiting for wine prefix ${WINEPREFIX} to become available..."
+    sleep 1
+done
+
+for x in {d..y}
+do
+    if test -d "/data/drive_${x}" && [ ! -d "${WINEPREFIX}drive_${x}" ]; then
+        mkdir "${WINEPREFIX}drive_${x}"
+        mkdir "${WINEPREFIX}drive_${x}/.bzvol"
+        chown -R ${USER_ID}:${GROUP_ID} "${WINEPREFIX}drive_${x}"
+    fi
+done
+
+if [ ! -d "${WINEPREFIX}dosdevices" ]
+then
+    mkdir "${WINEPREFIX}dosdevices"
+    chown -R ${USER_ID}:${GROUP_ID} "${WINEPREFIX}dosdevices"
+fi
+
+for x in {d..y}
+do
+    if test -d "/data/drive_${x}" ; then
+        echo "DEBUG: mounting drive ${x}"
+        mount --bind "${WINEPREFIX}drive_${x}/.bzvol" /enc/drive_${x}/.bzvol
+        ln -s -r /enc/drive_${x} "${WINEPREFIX}dosdevices/${x}:"
+    fi
+done
+
+echo "Mounted bind mounts"
+touch /mounted
+sleep infinity
+
+# echo "Clean up here?"
+exit 0
